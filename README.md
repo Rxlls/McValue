@@ -26,6 +26,9 @@
 ## 快速开始
 
 ```bash
+git clone https://github.com/Rxlls/McValue.git
+cd McValue
+
 npm install
 cp .env.example .env        # 填入你的麦当劳 MCP Token（可选）
 npm run dev                  # 启动 Web 服务 http://localhost:5173
