@@ -1,0 +1,27 @@
+{
+  "name": "mcvalue",
+  "version": "0.1.0",
+  "description": "McValue - 麦当劳套餐组合优化与点餐审计（基于官方 MCP）",
+  "type": "module",
+  "engines": {
+    "node": ">=20.12.0"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --import tsx src/server/main.ts",
+    "start": "node --env-file-if-exists=.env --import tsx src/server/main.ts",
+    "probe": "node --env-file-if-exists=.env --import tsx scripts/probe-mcp.ts",
+    "demo": "node --import tsx scripts/run-demo.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

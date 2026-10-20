@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+coverage/
+.DS_Store
+
+# WorkBuddy 运行期数据（含记忆与本地状态），属工具产物而非项目代码
+.workbuddy/
+
+# 真实凭证一律不入库
+**/mcp.json
+!mcp-config.example.json

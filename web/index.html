@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>McValue · 麦当劳套餐组合优化与点餐审计</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">Mc</span>
+    <div>
+      <h1>McValue</h1>
+      <p class="sub">麦当劳套餐组合优化 · 点餐审计</p>
+    </div>
+  </div>
+  <div class="badges">
+    <span id="modeBadge" class="badge badge-neutral">加载中…</span>
+    <span id="orderBadge" class="badge badge-safe">下单：关闭</span>
+    <span id="sourceNote" class="note"></span>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- ================= 需求侧栏 ================= -->
+  <aside class="panel side">
+    <h2>1 · 门店与用餐方式</h2>
+    <div class="row">
+      <input id="city" placeholder="城市" value="上海" />
+      <input id="keyword" placeholder="位置关键词" value="人民广场" />
+    </div>
+    <div class="row">
+      <button id="btnStores" class="btn">搜索门店</button>
+      <select id="beTypeSel" class="sel">
+        <option value="1">到店自提</option>
+        <option value="5">得来速</option>
+      </select>
+    </div>
+    <select id="storeSel" class="sel wide"></select>
+    <p id="storeHint" class="hint"></p>
+
+    <h2>2 · 需求输入</h2>
+    <textarea id="nlText" rows="3" placeholder="例如：2 个人，预算 60 元，要汉堡和饮料，不要香菜，尽量用券"></textarea>
+    <div class="grid2">
+      <label>预算（元）<input id="budget" type="number" min="0" step="1" placeholder="留空=不限" /></label>
+      <label>人数<input id="people" type="number" min="1" step="1" value="1" /></label>
+      <label>整单件数上限<input id="maxItems" type="number" min="1" step="1" placeholder="留空=自动" /></label>
+      <label>人均热量上限（kcal）<input id="kcal" type="number" min="0" step="50" placeholder="留空=不限" /></label>
+    </div>
+    <p class="hint">
+      预算是<b>上限</b>而不是目标：不会为了省钱推荐吃不饱的方案。
+      人数决定份量硬约束与必选类别配齐数量（2 人 ⇒ 主食 ≥ 2 份、饮料 ≥ 2 杯）。
+    </p>
+
+    <fieldset>
+      <legend>用餐结构（数量可调，0 = 不要）</legend>
+      <div class="grid2">
+        <label>主食（堡/套餐）<input id="stMain" type="number" min="0" step="1" value="1" /></label>
+        <label>饮料（杯）<input id="stDrink" type="number" min="0" step="1" value="1" /></label>
+        <label>小食（份）<input id="stSide" type="number" min="0" step="1" value="0" /></label>
+        <label>甜品（份）<input id="stDessert" type="number" min="0" step="1" value="0" /></label>
+      </div>
+      <div class="chips" id="structPresets">
+        <button type="button" data-struct="1,1,0,0">一人食</button>
+        <button type="button" data-struct="2,2,0,0">双人标准</button>
+        <button type="button" data-struct="2,1,1,0">双人分享（1 杯饮料）</button>
+        <button type="button" data-struct="1,2,2,0">主食少·小食多</button>
+      </div>
+      <p class="hint">
+        「2 个人」不等于「2 个汉堡 + 2 杯饮料」。这里填的就是你要的份数；
+        改了之后方案会按新结构重算。人数变化会同步默认值，你手动改过就不再覆盖。
+      </p>
+    </fieldset>
+
+    <div class="grid2">
+      <label>优惠偏好
+        <select id="couponPref" class="sel">
+          <option value="auto">自动择优</option>
+          <option value="require">必须用券</option>
+          <option value="ignore">忽略券</option>
+        </select>
+      </label>
+      <label class="chk"><input id="preferCombo" type="checkbox" /> 偏好套餐</label>
+    </div>
+
+    <button id="btnOptimize" class="btn primary wide">生成候选方案</button>
+    <p id="optStatus" class="hint"></p>
+
+    <div id="parseNotes" class="notes"></div>
+  </aside>
+
+  <!-- ================= 主区 ================= -->
+  <section class="panel main">
+    <div class="tabs">
+      <button class="tab active" data-tab="candidates">候选方案</button>
+      <button class="tab" data-tab="compare">方案比较</button>
+      <button class="tab" data-tab="audit">点餐审计</button>
+      <button class="tab" data-tab="provenance">数据来源</button>
+    </div>
+
+    <div id="tab-candidates" class="tabpane active">
+      <div id="conclusion" class="conclusion"></div>
+      <div id="cards" class="cards"></div>
+      <div id="empty" class="empty">填写需求后点击「生成候选方案」。</div>
+    </div>
+
+    <div id="tab-compare" class="tabpane">
+      <div id="compareBox" class="empty">生成方案后可在此比较。</div>
+    </div>
+
+    <div id="tab-audit" class="tabpane">
+      <div class="audit-input">
+        <h3>审计一份已有清单</h3>
+        <div class="row">
+          <input id="auditCodes" class="wide" placeholder="商品编码与数量，如：1100*1,4810*1,9900008751*1" />
+          <button id="btnAudit" class="btn">核验并生成替代方案</button>
+        </div>
+        <p class="hint">编码可从候选方案卡片复制；留空则默认审计当前推荐方案。</p>
+      </div>
+      <div id="auditResult"></div>
+    </div>
+
+    <div id="tab-provenance" class="tabpane">
+      <div id="provenanceBox" class="empty">暂无数据。</div>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>
