@@ -113,28 +113,46 @@ function dedupe(lines: Lines): Lines {
   return [...m.entries()].map(([code, quantity]) => ({ code, quantity }));
 }
 
-/** 策略 B：最便宜的主食 × 人数 + 最便宜的饮料 × 人数。 */
+/**
+ * 策略 B：最便宜的主食 × 人数 + 最便宜的饮料 × 人数。
+ * 必须遵守单品数量上限（maxQtyPerItem），否则这个基线会做出产品根本不接受的组合，
+ * 比出来的"更便宜"没有意义。
+ */
 function greedyCheapest(menu: MenuItem[], req: Requirement): Lines {
   const out: Lines = [];
+  const cap = Math.max(1, req.maxQtyPerItem);
   for (const r of req.requiredCategories) {
     const candidates = menu
       .filter((m) => slotSatietyOf(m.category, m.name)?.slot === r.category)
       .filter((m) => m.currentPriceCents !== null)
       .sort((a, b) => (a.currentPriceCents ?? 0) - (b.currentPriceCents ?? 0));
-    const cheapest = candidates[0];
-    if (cheapest) out.push({ code: cheapest.code, quantity: r.minCount });
+    let left = r.minCount;
+    for (const item of candidates) {
+      if (left <= 0) break;
+      const qty = Math.min(cap, left);
+      out.push({ code: item.code, quantity: qty });
+      left -= qty;
+    }
   }
-  return out;
+  return dedupe(out);
 }
 
-/** 策略 C：不分品类，取最便宜的 N 件（N = 人数 × 2）。 */
-function cheapestOverall(menu: MenuItem[], people: number): Lines {
-  const n = Math.max(2, people * 2);
+/** 策略 C：不分品类，取最便宜的 N 件（N = 人数 × 2）。单品数量同样受上限约束。 */
+function cheapestOverall(menu: MenuItem[], req: Requirement): Lines {
+  const n = Math.max(2, req.people * 2);
+  const cap = Math.max(1, req.maxQtyPerItem);
   const sorted = [...menu]
     .filter((m) => m.currentPriceCents !== null)
     .sort((a, b) => (a.currentPriceCents ?? 0) - (b.currentPriceCents ?? 0));
-  const picked = sorted.slice(0, n);
-  return picked.map((m) => ({ code: m.code, quantity: 1 }));
+  const out: Lines = [];
+  let left = n;
+  for (const m of sorted) {
+    if (left <= 0) break;
+    const qty = Math.min(cap, left);
+    out.push({ code: m.code, quantity: qty });
+    left -= qty;
+  }
+  return out;
 }
 
 /** 策略 D：随机抽 300 次，返回份量/类别满足且估算在预算内的最便宜解。 */
@@ -250,7 +268,7 @@ async function main(): Promise<void> {
     rows.push(await evaluate("McValue", mvLines, ctx, menuMap, req, source));
 
     rows.push(await evaluate("贪心凑单", greedyCheapest(menu, req), ctx, menuMap, req, source));
-    rows.push(await evaluate("只挑最便宜", cheapestOverall(menu, req.people), ctx, menuMap, req, source));
+    rows.push(await evaluate("只挑最便宜", cheapestOverall(menu, req), ctx, menuMap, req, source));
     rows.push(await evaluate("随机可行", randomFeasible(menu, req, menuMap), ctx, menuMap, req, source));
 
     console.log(`\n── ${c.label} ─ ${req.requiredCategories.map((r) => `${r.category}×${r.minCount}`).join(" ")}`);

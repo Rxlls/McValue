@@ -154,7 +154,19 @@ export function searchCombinations(
   accept: (lines: SimpleLine[]) => boolean,
 ): SearchOutcome {
   const budget = requirement.budgetCents;
-  const maxItems = Math.min(requirement.maxItems ?? config.maxItems, config.maxItems);
+  /*
+   * 件数上界：用户说了结构（2 人 = 2 主食 + 2 饮料 = 4 件），就以结构为准。
+   * 否则搜索会同意「2 个人配 4 杯饮料」这种组合——份量上不算错，
+   * 但用户为多出来的两杯多付了钱，属于实打实的浪费。
+   * 只有在用户显式给了件数上限、或没有结构时，才退回配置里的宽松上限。
+   */
+  const structureCap = requirement.mealStructure
+    ? requirement.mealStructure.main + requirement.mealStructure.drink + requirement.mealStructure.side + requirement.mealStructure.dessert
+    : null;
+  const maxItems = Math.min(
+    requirement.maxItems ?? (structureCap !== null && structureCap > 0 ? structureCap : config.maxItems),
+    config.maxItems,
+  );
   const maxQty = Math.min(requirement.maxQtyPerItem, config.maxQtyPerItem);
   const mustInclude = requirement.mustIncludeCodes;
 

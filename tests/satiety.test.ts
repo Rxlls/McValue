@@ -207,9 +207,22 @@ describe("评分：份量优先于省钱", () => {
     expect(enoughFor2.total).toBeGreaterThan(cheapButHungry.total);
   });
 
-  it("预算内不再奖励更便宜：花得充分的方案预算分不低", () => {
-    const a = scoreOf([{ code: "BG", quantity: 2 }, { code: "DR", quantity: 2 }], 2, 6000);
-    expect(a.budgetFit).toBe(100);
+  it("同等满足度下，花得更少预算分更高", () => {
+    // 取向变更：预算内不再一律满分。份量已是硬约束，
+    // 「更省」不会以「吃不饱」为代价，因此可以、也应该奖励结余。
+    const cheap = scoreOf([{ code: "BG", quantity: 2 }, { code: "DR", quantity: 2 }], 2, 12000);
+    const dear = scoreOf([{ code: "BG", quantity: 2 }, { code: "DR", quantity: 2 }], 2, 4800);
+    expect(cheap.budgetFit).toBeGreaterThan(dear.budgetFit ?? 0);
+  });
+
+  it("预算内花满也不是满分，但省下来的钱不会让空单得分", () => {
+    // 4000 分的组合 / 5000 预算 → 预算分在 (0,100) 之间，不再是一律 100
+    const full = scoreOf([{ code: "BG", quantity: 2 }, { code: "DR", quantity: 2 }], 2, 5000);
+    expect(full.budgetFit).toBeGreaterThan(0);
+    expect(full.budgetFit).toBeLessThan(100);
+    // 便宜但吃不饱的组合，份量分必须明显低于吃饱的组合
+    const hungry = scoreOf([{ code: "BG", quantity: 1 }, { code: "DR", quantity: 1 }], 2, 5000);
+    expect(hungry.satiety).toBeLessThan(full.satiety);
   });
 
   it("分数解释里包含份量依据", () => {
