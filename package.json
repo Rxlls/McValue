@@ -11,16 +11,17 @@
     "start": "node --env-file-if-exists=.env --import tsx src/server/main.ts",
     "probe": "node --env-file-if-exists=.env --import tsx scripts/probe-mcp.ts",
     "demo": "node --import tsx scripts/run-demo.ts",
+    "bench": "node --import tsx scripts/bench-baseline.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.0"
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "tsx": "^4.19.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

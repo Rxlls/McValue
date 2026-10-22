@@ -121,7 +121,14 @@ export function buildPool(
     picked.push(item);
     pickedCodes.add(item.code);
   }
-  return picked;
+
+  /*
+   * 池内顺序决定 DFS 的枚举顺序（成员不变，只影响先看到谁）。
+   * 按价格升序：搜索会先到达「便宜且能凑齐」的分支，而不是在昂贵四件套的前缀上烧光节点预算。
+   * 实测 4 人 / ¥120 场景，按相关度排序时 15 万节点内一个可行组合都到不了；
+   * 按价格升序后同一预算内可稳定给出方案。偏好与评分不变，改的只是遍历次序。
+   */
+  return picked.sort((a, b) => a.priceCents - b.priceCents || b.relevance - a.relevance);
 }
 
 export interface SearchOutcome {
@@ -160,6 +167,62 @@ export function searchCombinations(
 
   const current: SimpleLine[] = [];
 
+  /**
+   * 可行性下界（分支定界剪枝）。
+   *
+   * 没有这一步时，搜索会把节点预算全部烧在「剩余名额已经不够满足必修类别」的分支上：
+   * 实测 4 人 / 预算 ¥120（需 4 汉堡 + 4 饮料 = 8 件）在 15 万节点上限内一个可行组合都没枚举到，
+   * 最终误报「无解」，而实际上 ¥88.60 就能凑齐。剪枝只判断「是否还有可能」，不改变任何偏好。
+   *
+   * 判定口径必须与 constraints.ts 完全一致：用 bindSlotWithEquivalents 绑定，
+   * 因为 requiredCategories 里的 category 可能是槽位名（burger），也可能是菜单真实分类名（汉堡）。
+   */
+  const poolCategories = [...new Set(pool.map((p) => p.category))];
+  const requiredSlots = requirement.requiredCategories.map((r) => ({
+    bound: new Set(bindSlotWithEquivalents(r.category, poolCategories)),
+    minCount: r.minCount,
+  }));
+
+  /** 每个必修类别里最便宜的一件的价格，用于预算下界。 */
+  const cheapestForSlot = requiredSlots.map((r) => {
+    let min: number | null = null;
+    for (const p of pool) {
+      if (!r.bound.has(p.category)) continue;
+      if (min === null || p.priceCents < min) min = p.priceCents;
+    }
+    return min;
+  });
+
+  /** 当前已满足的件数（按绑定后的分类统计）。 */
+  const categoryOfCode = new Map(pool.map((p) => [p.code, p.category] as const));
+  const satisfiedOf = (bound: Set<string>): number => {
+    let n = 0;
+    for (const c of current) {
+      const cat = categoryOfCode.get(c.code);
+      if (cat !== undefined && bound.has(cat)) n += c.quantity;
+    }
+    return n;
+  };
+
+  /** 返回 true 表示该分支已不可能满足硬约束，可以剪掉。 */
+  const definitelyInfeasible = (itemCount: number, cost: number): boolean => {
+    const remainingSlots = maxItems - itemCount;
+    let deficitItems = 0;
+    let deficitCost = 0;
+    for (let i = 0; i < requiredSlots.length; i += 1) {
+      const r = requiredSlots[i]!;
+      const deficit = Math.max(0, r.minCount - satisfiedOf(r.bound));
+      if (deficit === 0) continue;
+      const unit = cheapestForSlot[i];
+      if (unit === null) return true; // 池子里根本没有该类别的商品
+      deficitItems += deficit;
+      deficitCost += unit * deficit;
+    }
+    if (deficitItems > remainingSlots) return true; // 名额不够了
+    if (budget !== null && cost + deficitCost > budget) return true; // 补齐也超预算
+    return false;
+  };
+
   const dfs = (startIdx: number, itemCount: number, cost: number): void => {
     if (boundedReason) return;
     nodes++;
@@ -167,6 +230,8 @@ export function searchCombinations(
       boundedReason = `搜索节点数达到上限 ${config.maxNodes}`;
       return;
     }
+    // 分支定界：剩余名额已不可能补齐必修类别时，整条分支直接剪掉
+    if (definitelyInfeasible(itemCount, cost)) return;
 
     for (let i = startIdx; i < pool.length; i++) {
       const item = pool[i];

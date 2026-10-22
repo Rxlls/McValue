@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: 类型检查与测试（Node ${{ matrix.node }}）
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 类型检查
+        run: npm run typecheck
+
+      - name: 单元与集成测试
+        # 未配置 MCD_MCP_TOKEN，live-mcp.test.ts 的 3 项真实调用会自动跳过，
+        # 其余 86 项断言全部执行。CI 不依赖任何外部服务。
+        run: npm test
+
+  prod-boot:
+    name: 生产依赖可启动性
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # 模拟"只装 dependencies"的生产部署，验证 start 脚本不依赖开发依赖
+      - name: 仅安装生产依赖
+        run: |
+          mkdir -p /tmp/prod
+          cp -r src web package.json package-lock.json /tmp/prod
+          cd /tmp/prod
+          npm ci --omit=dev
+          if [ -d node_modules/vitest ] || [ -d node_modules/typescript ]; then
+            echo "开发依赖被带进生产安装"; exit 1
+          fi
+
+      - name: 启动服务并探活
+        run: |
+          cd /tmp/prod
+          PORT=5199 npm start > start.log 2>&1 &
+          ok=0
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:5199/api/health -o health.json; then ok=1; break; fi
+            sleep 1
+          done
+          cat start.log
+          if [ "$ok" != "1" ]; then echo "服务未在 30 秒内就绪"; exit 1; fi
+          cat health.json
+          grep -q '"mode"' health.json

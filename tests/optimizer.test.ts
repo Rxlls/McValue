@@ -7,6 +7,7 @@ import { aggregateNutrition, estimateLines } from "../src/domain/pricing";
 import { evaluateConstraints } from "../src/domain/constraints";
 import { fingerprintOf } from "../src/domain/lines";
 import { computeSatiety, slotSatietyOf } from "../src/domain/satiety";
+import { bindSlotWithEquivalents } from "../src/domain/requirement";
 import type { MenuItem, PriceContext, Requirement } from "../src/domain/types";
 
 const CTX: PriceContext = {
@@ -171,11 +172,15 @@ describe("优化编排（模拟数据源）", () => {
       requirement: req({ requiredCategories: [{ category: "burger", minCount: 2 }], budgetCents: 10000 }),
       verifyLimit: 3,
     });
-    // 所有候选都必须至少 2 件汉堡类
+    // 所有候选都必须至少 2 件「汉堡类」。
+    // 计数口径与产品一致：套餐可顶替汉堡（bindSlotWithEquivalents），
+    // 因此不能只数字面分类为「汉堡」的商品，否则会把合法的「1 汉堡 + 1 套餐」误判为违规。
     const menu = await menuMap(ds);
+    const allCats = [...new Set([...menu.values()].map((m) => m.category))];
+    const bound = bindSlotWithEquivalents("burger", allCats);
     for (const c of report.candidates) {
       const burgerCount = c.lines.reduce(
-        (s, l) => s + (menu.get(l.code)?.category === "汉堡" ? l.quantity : 0),
+        (s, l) => s + (bound.includes(menu.get(l.code)?.category ?? "") ? l.quantity : 0),
         0,
       );
       expect(burgerCount).toBeGreaterThanOrEqual(2);
